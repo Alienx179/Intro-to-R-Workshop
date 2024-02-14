@@ -1,0 +1,348 @@
+---
+title: "2024-02-08 Creating figures in R"
+author: "Austin K Lien"
+date: "2024-02-09"
+output: 
+  html_document:
+    # code_folding: hide
+    df_print: "kable"
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+    toc_width: 1
+    fig_retina: 2
+    number_sections: no
+    highlight: pygments
+    theme: sandstone
+    
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+# Bringing in our own dataset
+
+**Now that we've covered the basics of R, including its syntax, variables, data structures, and the essentials of packages, it's time to put this knowledge into practice by working with real data.**
+
+Before we delve into working with our dataset, let's make sure we're in the right place. The working directory is the folder where R will look for files by default. To set the working directory, we use the '**setwd()**' function.
+
+Setting the working directory is an important step when working with datasets in R. The working directory is the folder where R looks for and saves files. By setting the working directory, you make it easier to read and write files as you can refer to them by their relative paths.
+
+Determining the file path for setting the working directory depends on your operating system and the location of the folder you want to use. 
+
+In RStudio you can also go to the 'session' menu, select 'set working directory', click 'choose directory', and navigate to the desired folder in the file dialog.
+
+- Once your chosen working directory is selected, the corresponding code and file path will appear on the console pane
+
+  - **from here, you can copy and paste the code and file path to your RMarkdown script**
+
+
+You can also navigate to the folder on your computer where the dataset is stored, or where you would like to save any files generated during your R session. 
+
+ - Click on the folder's address bar, and it will display the full path. You can copy this path OR select'copy path' on the top left of the file explorer
+
+
+- Use the **setwd()** function to specify the path to your chosen directory.
+  - Be mindful of the slashes in your file path. Windows uses backslashes ( **'\'** ), and on macOS/Linux, use forward slashes ( **'/'** ).
+  - **Make sure to change to forward slashes ( / ) for paths in R when using Windows.**
+  - You can confirm that you've set the correct working directory by using the **getwd()** function.
+  
+ 
+
+```{r}
+setwd("C:/Users/lienx/Documents/2024-02-06 R Workshop")
+
+getwd()
+```
+
+Now let's install and load the packages '**readxl**' and '**tidyverse**'
+
+```{r}
+# Install.packages('readxl')
+# Install.packages('tidyverse')
+
+library(readxl)
+library(tidyverse)
+``` 
+
+Go to the **Files tab** in the Output pane. Do you see your Excel file? We can bring it into our environment using the '**read_excel()**' command from the readxl package.
+
+**Note:** To import tab-delimited filed (.csv) use the 'read.csv()' function
+
+```{r}
+Assay <- read_excel(("2024-02-06 Data Set.xlsx"), 
+                      sheet = "Soil Assays")
+```
+
+Check the environment, do you see your data frame?
+
+Once the data is loaded, we can explore it to understand its structure and content several functions to get an initial overview
+
+- **head()**: displays the first few rows
+- **summary()**: displays summary statistics 
+- **str()**: displays the structure of the data
+
+```{r}
+head(Assay)
+ # displays the first few rows
+
+summary(Assay)
+# displays summary statistics 
+
+str(Assay)
+# displays the structure of the data
+```
+
+*Remember, if you don't want the output to show up in your final rendering, we can always do this in the console pane below.*
+  
+Now let's introduce **Factors**!
+
+- A **factor** is a data structure used to represent distinct categories or levels.
+- Most often, they are things like Treatments, Varieties, or Replications in an experiment
+
+- the **as.factor()** function automatically identifies unique categories or levels 
+- the **factor()** function is often used to specify custom levels using the '**level**' argument and allows you to rename them with the '**labels**' argument
+  - **Be advised**, levels and labels need to be the same length and order.
+    - In addition, the levels will appear alphabetically, even numbers (i.e., 1, 10, 2, 3)
+- the **ordered()** function can be used similar to factor() but it is used to create an ordered factor where levels have a meaningful order
+- **Note**: (If your variables long names, the **'\n'** argument can be used to create additional lines for each variable.
+  
+
+```{r}
+Assay$Rep <- as.factor(Assay$Rep)
+
+Assay$Trmt <- factor(Assay$Trmt, 
+                    levels = c('kab', 'tach'),
+                    labels = c("Kabina", "Tachigaren"))
+
+Assay$Soil <- as.factor(Assay$Soil)
+
+Assay$Year <- ordered(Assay$Year,
+                      levels = c('2024', '2023'),
+                      labels = c('2024', '2023'))
+```
+
+# Creating a boxplot 
+
+**Now let's make our first figure!**
+
+We will use the ggplot2 package to compare the Root Rot Index (**TotalRRI**) among the different **Soil** and **Trmt** using the *ggplot()** and *geom_boxplot()* arguments.
+
+But let's first break down the components of 'ggplot()'
+- **ggplot(data = my_data, aes(x = X, y = Y))**: This initializes the plot and sets the data and aesthetic mappings.
+  - **data**: specifies the dataframe containing the variables to be plotted.
+  - **aes()**: Aesthetic mappings define how variables in the dataset are mapped to visual properties.
+    - Here, '**x**', '**y**', and '**fill**' aesthetics are mapped to specific variables.
+  
+- The '**+**' operator is used for adding additional layers to a plot, allowing you to build up a complex plot step by step.
+  -  **+ geom_boxplot()** :creates a boxplot.
+      - **width**: Controls the width of the boxes in the plot.
+      - **color**: Sets the color of the outlines of the boxes.
+        - colors can be specified either by name (e.g.: “red”) or by hexadecimal code (e.g. : “#FF1234”)
+      - **alpha**: Adjusts the transparency of the boxes.
+  - **+ facet_grid()** OR **facet_wrap**: Creates faceted plots to display multiple subsets of data into single plot.
+  - **+ labs()**: Sets the titles for the plot and axes.
+  - **+ theme_light()**:Specifies the overall appearance of the plot.
+  - **theme()**: customizes the appearance of the plot and allows modifications to various aspects, such as axis labels, text size, legend placement, and more.
+  
+Similar principles apply to other types of plots in ggplot2. As you gain more experience with ggplot2, you'll discover additional options for fine-tuning your visualizations.
+
+
+```{r}
+ggplot(
+  # this initializes the plot
+  
+  data = Assay,
+ #  specifies the dataframe containing the variables to be plotted
+       
+       aes(x=Soil, y = TotalRRI, fill = Trmt)) +
+        # aesthetics are mapped to specific variables
+  
+       #  The + operator is used for adding additional layers to a plot, allowing you to build up a complex plot step by step.
+  
+  geom_boxplot(
+    #  creates a boxplot
+    width = 0.25,
+    color = "black", 
+    alpha = 0.8) +
+    # Additional styling for the specifically the box plots
+  
+  facet_wrap(~ Year, ncol = 2) +
+ #  Creates faceted plots to display multiple subsets of data into single plot.
+  
+  labs(x = "Location",
+       y = "Root Rot Index (0-100)",
+       title = "Root Rot Indices of disease nursery soils by year",
+       fill = "Seed Treatment") +
+  
+  theme_light() +
+  
+  theme(text = element_text(size = 15, 
+                            face = "bold", 
+                            color = "darkblue"),
+        # changes visual aspects of labels and titles (all text besides axis text)
+        
+        axis.text.x = element_text(size = 10, 
+                                   face = "italic", 
+                                   color = "forestgreen",
+                                   angle = 45,
+                                   hjust = 0.5,
+                                   vjust = 0.5),
+        # changes visuals of axis text
+        
+        axis.title.x = element_blank(),
+        # element_blank() draws nothing and assigns no space
+        
+        plot.title = element_text(hjust = 0.5, vjust = 1),
+        
+        legend.position = "bottom",
+        # moves legend position
+        
+        legend.background = element_rect(color = "black", 
+                                         fill = "lightgray", 
+                                         linewidth = 0.5),
+        plot.background = element_rect(color = "black", 
+                                       fill = NA, 
+                                       linewidth = 2)) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2))
+  # sets values for discrete scale aesthetics - this staggers the x axis labels
+  
+```
+
+# Data manipulation
+
+Now that we've covered the basics of creating and customizing visualizations in ggplot2, let's delve into an essential aspect of data manipulation: the difference between wide and long formats.
+
+- **Wide Format**: Data is arranged with multiple variables as *columns*.
+  - this format structure is straightforward and easy for humans to comprehend; however, it may not conform to the principles of tidy data and is difficult to work with for some statistical models and visualizations.
+- **Long Format**: Data is arranged as *key-value pairs*.
+  - this format structure allows for more flexibility in analysis and visualization; in addition, it easily accommodates a varying number of measurements or categories.
+  
+We'll now use '**pivot_longer()**' on a our Assay dataset to create a new dataframe where all root rot indices and transitioned from a wide to a long format.
+  
+- **data**: the data frame to be reshaped.
+- **cols: a vector specifying the columns to pivot into longer format.
+- **names_to**: specifies the name of the new column that will store the **variable names** from the original wide format.
+- **values_to**: specifies the name of the new column that will store the **values** associated with each variable.
+
+**Let's also order our root rot indices**
+
+```{r}
+Assay_long <- pivot_longer(data = Assay,
+                           col = c("TotalRRI", "AphRRI", "RhizRRI"),
+                           names_to = "RRI_Type",
+                           values_to = "Index_Value")
+
+Assay_long$RRI_Type <- ordered(Assay_long$RRI_Type,
+                     levels = c("TotalRRI", "AphRRI", "RhizRRI"),
+                     labels = c("Total\nRoot Rot",
+                                "Aphanomyces\nRoot Rot",
+                                "Rhizoctonia\nRoot Rot"))
+```
+
+**Now let's make a new boxplot that shows each of the Root Rot Indices on the x axis and we will facet by Year and Soil using facet_grid**
+
+```{r}
+ggplot(data = Assay_long,
+       aes(x=RRI_Type, y = Index_Value, fill = Trmt)) +
+  geom_boxplot(width = 0.5, color = "black", alpha = 0.8) +
+  facet_grid(Soil ~ Year) +
+  labs(x = "Root Rot Index Type",
+       y = "Root Rot Index (0-100)",
+       title = "Root Rot Indices of disease nursery soils by year",
+       fill = "Seed Treatment") +
+  theme_bw() +
+  theme(axis.text.x = element_text(size = 7.5))
+```
+
+# Creating more plots (ggpubr)
+
+Now that we've covered the fundamentals of creating visualizations with ggplot2, let's explore **ggpubr**, an extension package that takes our plotting capabilities to the next level. **ggpubr** is designed to make it easier to create complex and publication-ready plots with additional functionalities.
+
+While ggplot2 is a versatile and powerful plotting package for a wide range of tasks, ggpubr serves as a convenient extension when the goal is to quickly generate aesthetically pleasing, publication-ready plots with minimal manual adjustments. 
+
+Let's first install and load in the packages **ggpubr** and **RColorBrewer**
+
+```{r}
+# install.packages(c("ggpubr", "RColorBrewer"))
+
+library(ggpubr)
+library(RColorBrewer)
+display.brewer.all()
+# displays all RColorBrewer palettes
+
+library(viridis)
+# Another color palette package
+```
+
+## ggpubr boxplot
+
+
+Let's make a box and whisker plot  of our root rot indices and add error bars and value labels using **ggboxplot()** from the ggpubr package. 
+
+- Take note of the minor differences when setting up the plot
+  - To view all options and how to use them, use the **help tab** 
+- Note that all variables are in quotations
+    - This also allows us to access column names that have spaces in them or columns that start with numbers
+- Once the plot is set up, we can add ggplot2 objects to it
+
+Let's also change the color palette using the **scale_fill_brewer(palette = )** function from the RColorBrewer package. 
+
+```{r}
+ggboxplot(Assay_long,
+          x = "RRI_Type",
+          y = "Index_Value",
+          fill = "Trmt",
+          facet.by = "Soil", ncol = 2) +
+  scale_fill_brewer(palette = "Dark2") +
+  
+  theme(axis.text.x = element_text(size = 15))
+
+```
+
+
+## ggpubr barplot
+
+Let's make a bar plot  of our root rot indices and add error bars and value labels using **ggbarplot()** from the ggpubr package. 
+
+    
+```{r}
+ggbarplot(Assay_long,
+          x = "RRI_Type",
+          y = "Index_Value",
+          fill = "Trmt",
+          
+          facet.by = c("Soil", "Year"), nrow = 2,
+          # slightly different than ggplot2
+          
+          add = 'mean_se',
+          # This adds standard error bars 
+          
+          position = position_dodge(0.8),
+          # this separates the columns, rather than being stacked
+          
+          # BOTH 'add = "mean",' AND 'position = position_dodge(1)' NEED TO BE USED FOR BARPLOTS
+          
+          label = TRUE,
+          lab.size = 4,
+          lab.vjust = 0.5,
+          lab.nb.digits = 1,
+          # these control the data labels
+          
+          xlab = "Root Rot Index Type",
+          ylab = "Root Rot Index (0-100)",
+          title = "Root Rot Indices of disease nursery soils by year"
+          # We can change these titles here, but not the legend title
+          ) +
+  
+   labs(fill = "Seed Treatment") + 
+  
+  scale_fill_brewer(palette = "Dark2") +
+    # This comes from the RColorBrewer Package
+    
+  theme(axis.text.x = element_text(size = 7.5),
+        legend.position = c(0.9,0.9))
+        # You can place the legend anywhere within the plot using a vector
+    
+
+```

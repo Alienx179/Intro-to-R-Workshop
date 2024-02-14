@@ -1,0 +1,580 @@
+---
+title: "2024-02-12 - More figures, tables, and summary stats in R"
+author: "Austin K Lien"
+date: "2024-02-13"
+output: 
+  html_document:
+    # code_folding: hide
+    df_print: "kable"
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+    toc_width: 1
+    fig_retina: 2
+    number_sections: no
+    highlight: pygments
+    theme: sandstone
+    
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+# Picking up where we left off...
+
+**During the previous two sessions we covered the follow**
+- basics of the R environment and syntax in R
+- setting the working directory
+- bringing in data
+  - factoring distinct groups
+  - pivot_longer() data manipulation
+- data visualization using ggplot2 and ggpubr
+
+- Below, I will bring in all of data so we can start fresh here. 
+
+## loading packages
+```{r}
+library(readxl)
+library(tidyverse)
+library(ggpubr)
+library(RColorBrewer)
+```
+
+## Setting up Data
+```{r}
+setwd("C:/Users/lienx/Documents/2024-02-06 R Workshop")
+
+Assay <- read_excel(("2024-02-06 Data Set.xlsx"), 
+                      sheet = "Soil Assays")
+
+Assay$Rep <- as.factor(Assay$Rep)
+
+Assay$Trmt <- factor(Assay$Trmt, 
+                    levels = c('kab', 'tach'),
+                    labels = c("Kabina", "Tachigaren"))
+
+Assay$Soil <- as.factor(Assay$Soil)
+
+Assay$Year <- ordered(Assay$Year,
+                      levels = c('2024', '2023'),
+                      labels = c('2024', '2023'))
+
+
+Assay_long <- pivot_longer(data = Assay,
+                           col = c("TotalRRI", "AphRRI", "RhizRRI"),
+                           names_to = "RRI_Type",
+                           values_to = "Index_Value")
+
+Assay_long$RRI_Type <- ordered(Assay_long$RRI_Type,
+                     levels = c("TotalRRI", "AphRRI", "RhizRRI"),
+                     labels = c("Total Root Rot",
+                                "Aphanomyces Root Rot",
+                                "Rhizoctonia Root Rot"))
+```
+
+## ggpubr boxplot
+
+
+Let's make a box and whisker plot  of our root rot indices and add error bars and value labels using **ggboxplot()** from the ggpubr package. 
+
+- Take note of the minor differences when setting up the plot
+  - To view all options and how to use them, use the **help tab** 
+- Note that all variables are in quotations
+    - This also allows us to access column names that have spaces in them or columns that start with numbers
+- Once the plot is set up, we can add ggplot2 objects to it
+
+Let's also change the color palette using the **scale_fill_brewer(palette = )** function from the RColorBrewer package. 
+
+```{r}
+ggboxplot(Assay_long,
+          x = "RRI_Type",
+          y = "Index_Value",
+          fill = "Trmt",
+          facet.by = "Soil", ncol = 2) +
+  scale_fill_brewer(palette = "Dark2") +
+  
+  theme(axis.text.x = element_text(size = 15)) +
+  
+  scale_x_discrete(guide = guide_axis(n.dodge = 2))
+# sets values for discrete scale aesthetics - this staggers the x axis labels
+
+
+```
+
+
+## ggpubr barplot
+
+Let's make a bar plot  of our root rot indices and add error bars and value labels using **ggbarplot()** from the ggpubr package. 
+
+    
+```{r}
+ggbarplot(Assay_long,
+          x = "RRI_Type",
+          y = "Index_Value",
+          fill = "Trmt",
+          
+          facet.by = c("Soil", "Year"), nrow = 2,
+          # slightly different than ggplot2
+          
+          add = 'mean_se',
+          # This adds standard error bars 
+          
+          position = position_dodge(0.8),
+          # this separates the columns, rather than being stacked
+          
+          # BOTH 'add = "mean",' AND 'position = position_dodge(1)' NEED TO BE USED FOR BARPLOTS
+          
+          label = TRUE,
+          lab.size = 4,
+          lab.vjust = 0.5,
+          lab.nb.digits = 1,
+          # these control the data labels
+          
+          xlab = "Root Rot Index Type",
+          ylab = "Root Rot Index (0-100)",
+          title = "Root Rot Indices of disease nursery soils by year"
+          # We can change these titles here, but not the legend title
+          ) +
+  
+   labs(fill = "Seed Treatment") + 
+  
+  scale_fill_brewer(palette = "Dark2") +
+    # This comes from the RColorBrewer Package
+    
+  theme(axis.text.x = element_text(size = 7.5),
+        legend.position = c(0.9,0.9)) 
+        # You can place the legend anywhere within the plot using a vector
+    
+
+```
+
+## ggpubr boxplot and jitter
+
+**Let's try a different plot with ggpubr**
+
+- We will use **ggboxplot()** from the ggpubr package
+- I am also introducing **jitter** points and manually changing shapes or colors
+
+```{r}
+
+ggboxplot(Assay,
+          x = "Soil",
+          y = "AphRRI",
+          fill = "Soil",
+          add = "jitter",
+          add.params = list(shape = "Trmt"),
+          # this is adding jitter points according to treatment
+          # we could also assign the color
+
+          ) +
+scale_shape_manual(values = c(2,3)) +
+# This manually changed the jitter shapes (shape = ) 
+  
+scale_fill_manual(values = c("salmon", "cyan"))
+# This changed the boxplot (fill = ) color
+```
+
+**We can also view the distribution of the data using a violin plot**
+
+## violin plot
+```{r}
+ggviolin(Assay, 
+          x = "Trmt",
+          add = 'jitter',
+          fill = "Soil",
+          y = "AphRRI",
+          add.params = list(shape = "Year",
+                            fill = "Soil")) +
+  scale_shape_manual(values = c(2,4))
+```
+
+
+## ggpubr line graph
+
+Now, let's create line graphs using **ggline()** to display trends and patterns over a continuous variable, making them suitable for time series data or any data with a natural ordering.
+
+The columns labelled c('DAP_6', 'DAP_14', 'DAP_21', 'DAP_28') are Days After Planting (DAP).
+
+The data within the these columns are the number of living plants expressed as a percentage of the total number of planted. The column 
+
+**First, we need to create a new data.frame and use pivot_longer() to transpose these columns. We can also rename our values within our new column and make sure they are in the correct order**
+
+
+```{r}
+Assay_plants <- pivot_longer(Assay,
+                             cols = c('DAP_6', 'DAP_14', 'DAP_21', 'DAP_28'),
+                             names_to = "DAP",
+                             values_to = "plants")
+
+Assay_plants$DAP <- ordered(Assay_plants$DAP,
+                            levels = c('DAP_6', 'DAP_14', 'DAP_21', 'DAP_28'),
+                            labels = c('6','14','21','28'))
+```
+
+Now, we can use **ggline()** to create a line graph with DAP on the x axis. 
+
+- I will also introduce the **guides()** argument to customize labels in our legend and **rremove()** to remove specific components from a plot.
+
+```{r, warning=FALSE, message=FALSE}
+ggline(Assay_plants,
+       x = "DAP",
+       y = "plants",
+       group = "Trmt",
+       color = 'Trmt',
+       linetype = 'Trmt',
+       shape = "Trmt",
+       
+       add = c('mean_se'),
+       # without adding 'add = mean' or another variation, the line graph will not be logical
+       
+       facet.by = 'Soil',
+       
+       plot_type = 'b',
+       # creates both lines and points
+       
+       point.size = 1.2,
+       # this changes the size of the points
+       
+       ylab = "Plant Stand (%)",
+       xlab = "Days after planting",
+       
+       numeric.x.axis = TRUE
+       # makes x axis as numeric (i.e., logical spacing between values)
+       ) +
+  
+  theme_bw() +
+  
+  theme(text = element_text(
+                            # family = "Times New Roman", 
+                            # we can use the family argument once you install and load the 'extrafont' package
+                            size = 12, 
+                            face = "bold",
+                            color = "black"),
+        axis.text.x = element_text(angle = 0, 
+                                   size = 10, 
+                                   color = "black", 
+                                   vjust = 0.5, 
+                                   hjust = 0.5),
+        legend.position = "bottom",
+        legend.key.width = unit(1.5, "cm")) +
+        # This changes the width inside the legend, making them easier to distinguish
+        
+  rremove('legend.title') +
+  # rremove can be used to remove a specific component from a plot
+    
+  guides(color = guide_legend(nrow = 2)) +
+  # guides can be used to customize legends
+    
+  scale_color_brewer(palette = 'Set2')
+```
+
+
+## ggpubr scatter plot
+
+We will now use **ggscatter()** to visualize the relationship between RhizRRI and AphRRI
+
+```{r}
+ggscatter(Assay_plants, 
+          x= "RhizRRI", 
+          y = "AphRRI",
+          
+          add = "reg.line", 
+          # displays regression line
+          
+          conf.int = TRUE,
+          # displays buffer around regression line representing confidence interval
+          
+          cor.coef = TRUE,
+          cor.coef.size = 10,
+          cor.method = "pearson",
+          # displays correlation coefficient, size, and method
+          
+          cor.coef.coord = c(50, 75)
+          # moves the location of the data displayed in the plot
+          )
+```
+
+**Now, let's see if there is difference among the soils.**
+
+- We will need to use **stat_cor()** argument for displaying the coefficients for each treatment.
+  - ggscatter will display both lines but will only display one coefficient. 
+  
+```{r}
+ggscatter(Assay_plants, 
+          x= "RhizRRI", 
+          y = "AphRRI",
+          
+          color="Trmt",
+          add = "reg.line", 
+          conf.int = TRUE,
+          )+
+        # Displays regression lines and confidence interval for each factor signified by color
+  
+  stat_cor(aes(color = Trmt), 
+           method = "pearson", 
+           label.x = 40,
+           digits = 3)
+  # extension of ggpubr to further customize correlation stats, here we are displaying the coefficients for each Trmt.
+  
+
+```
+
+
+# Piping and Creating Tables 
+
+Tables are essential for presenting detailed data summaries and results, especially in research and data analysis.
+
+the package **kableExtra** simplifies the creation of aesthetically pleasing and customizable tables, enhancing the presentation of summary statistics and other tabular data.
+
+- kable() is a function from the knitr package, and it is primarily used for converting data frames into markdown or LaTeX tables.
+  - It provides basic functionality for formatting tables, such as aligning columns, setting column names, and applying basic formatting options.
+  - **kableExtra** is an extension package that builds upon kable() to provide additional customization options and formatting capabilities for tables with many arguments hidden in the background
+    -  this allows for more advanced customization of tables, making it suitable for creating publication-quality tables with complex formatting requirements.
+
+```{r}
+library(kableExtra)
+
+kbl(Assay)
+  # creates a table with auto formatting 
+```
+
+
+**But to go any further, I need to introduce piping!**
+
+- Piping simplifies the process of performing multiple operations on data by passing the output of one function directly as the input to another function.
+  - The pipe operator **%>%** is used to chain operations together. 
+    - It takes the output of the expression on its left-hand side and feeds it as the first argument to the function on its right-hand side.
+    - Piping makes code more readable and easier to understand, especially when performing multiple transformations on data.
+    - It reduces the need for intermediate variables and allows for more compact code.
+    - Piping is commonly used in data manipulation, data wrangling, and analysis workflows, where multiple operations are performed sequentially on datasets.
+    - The keyboard shortcut is **Ctrl+Shft+M**
+
+```{r}
+kbl(Assay) %>% 
+  kable_classic(full_width = F, html_font = "Arial")
+  # uses the built-in bootstrap themes by default 
+```
+
+We can also take our dataframe and pipe directly into the kbl() function and add some additional styling
+
+```{r}
+
+Assay %>% 
+kbl(digits = 1) %>%
+  # sets number of digits after the decimal point for all numbers
+  
+  kable_classic(full_width = F, html_font = "Arial") %>% 
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+ # provides a clean approach to modify the style of HTML tables
+```
+
+
+
+# Getting summary statistics 
+
+Summary statistics provide valuable insights into the characteristics and distributions of the data.
+
+**rstatix** offers a convenient way to compute various summary statistics, such as means, medians, standard deviations, and correlations, streamlining the data analysis process.
+
+```{r}
+library(rstatix)
+
+Assay %>%
+get_summary_stats(type="common")
+```
+
+**However, this table won't look to good once we knit our code, so let's use what we learned with kableExtra to make it look better**
+
+```{r}
+Assay %>%
+get_summary_stats(type="common") %>% 
+  # common designates the type of summary statistcs (many other options are available)
+  
+kbl(digits = 1) %>%
+    kable_classic(full_width = F, html_font = "Arial") %>%
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+```
+
+**Looks better right?**
+
+Now what if we want to get summary stats just for a few variables?
+
+```{r}
+Assay %>%
+get_summary_stats(c(TotalRRI, AphRRI, RhizRRI), type="common")  %>% 
+
+kbl(digits = 1) %>% kable_classic(full_width = F, html_font = "Arial")
+```
+
+But what if we want to get the summary statistics for each treatment, soil, or year?
+
+# Introducing dplyr and statistical syntax
+
+**dplyr** and tidyr provide a set of intuitive functions for manipulating data frames, making it ideal for tasks such as filtering, summarizing, mutating, and arranging data.
+  
+  - dplyr and tidyr should already be loaded with tidyverse, but you can load it separately as well.
+    - **group_by()** can be used to group data by one or more variables.
+      - ungroup() removes grouping.
+    - **filter()** can be used to subset your data based on specific criteria.
+      - subset() can also be used to subset data (from base R)
+    - **rename()** will rename columns. 
+    - **summarise()** is used to compute specific summary statistics within each group.
+      - *I prefer using rstatix*
+    - **mutate()** can create new variables based on existing ones or modify existing variables.
+   - Use **arrange()** to sort data based on one or more variables.
+      - Continue to use the pipe operator %>% to chain together multiple dplyr operations in a single line, promoting readability and conciseness.
+  - **seperate()** turns a single character column into multiple columns 
+  
+  
+By mastering the functions provided by dplyr, you can streamline your data analysis workflow and gain greater control over your data processing tasks
+
+Statistical operators in R are commonly used for performing various statistical calculations, hypothesis testing, and modeling. Here's an overview of some common statistical operators and their syntax in R:
+
+COMPARISON OPERATORS
+
+- x == y  # Equals
+- x != y  # Not equals
+- x > y   # Greater than
+- x < y   # Less than
+- x >= y  # Greater than or equal to
+- x <= y  # Less than or equal to
+- a :  z  # Spans between start and end
+
+
+
+LOGICAL OPERATORS 
+
+- x & y   # AND
+- x | y   # OR
+- !x      # NOT
+
+
+
+
+STATISTCAL FUNCTIONS
+
+- mean(x)      # Mean
+- sd(x)        # Standard deviation
+- median(x)    # Median
+- cor(x, y)    # Correlation coefficient
+- quantile(x)  # Quantiles
+
+
+
+**Okay, now let's group by Soil and get some summary statistics!**
+
+```{r}
+Assay %>%
+  group_by(Soil) %>% 
+  # converts to group
+  
+get_summary_stats(TotalRRI, type= c("mean_sd"))  %>% 
+# changed stats type to show only mean and standard deviation
+  
+kbl(digits = 1) %>% kable_classic(full_width = F, html_font = "Arial")
+```
+
+**We can also group by both Soil AND Trmt and look at only the mean and standard error Root rot indices**
+
+```{r}
+Assay %>%
+  group_by(Soil:Trmt) %>% 
+  get_summary_stats(c(TotalRRI, AphRRI, RhizRRI), type="mean_se")  %>%
+  kbl(digits = 1) %>% kable_classic(full_width = F, html_font = "Arial")
+```
+
+**Now let's use the filter() function to look at only 2024 data**
+
+```{r}
+Assay %>% filter(Year == "2024") %>%
+  group_by(Soil:Trmt) %>% 
+  get_summary_stats(c(TotalRRI), type="mean_se")  %>%
+  kbl(digits = 1) %>% kable_classic(full_width = F, html_font = "Arial")
+```
+
+**Let do only 2024 AND NOT the kabina treatment** 
+
+```{r}
+Assay %>% dplyr::filter(Year == "2024" & Trmt != "Kabina") %>% 
+  group_by(Soil:Trmt) %>% 
+  get_summary_stats(c(TotalRRI), type="mean_se")  %>%
+  kbl(digits = 1) %>% kable_classic(full_width = F, html_font = "Arial")
+```
+
+**OR we can remove the kabina treatment from just the 2023 trial**; this is done by the OR operator.
+
+```{r}
+Assay %>% filter(Year == "2024" | Trmt == "Tachigaren") %>% 
+  group_by(Soil:Trmt) %>% 
+  get_summary_stats(c(TotalRRI), type="mean_se")  %>%
+  kbl(digits = 1) %>% kable_classic(full_width = F, html_font = "Arial")
+```
+
+
+**REMINDER: Rather than creating new strings for everything, you can also pipe this directly into summary statistics!**
+
+**Now lets put it all together to create another table**
+
+```{r, warning=FALSE, message=FALSE}
+Assay %>%
+  group_by(Year:Soil:Trmt) %>% 
+  get_summary_stats(c(TotalRRI, AphRRI, RhizRRI), type="common") %>% 
+  
+  dplyr::select(c('Year:Soil:Trmt', variable, mean)) %>%
+  
+  separate(col = 'Year:Soil:Trmt',
+           into = c('Year', 'Soil', 'Trmt'),
+           sep = ":") %>% 
+  
+  pivot_wider(
+    names_from = variable,
+    values_from = c(mean)) %>% 
+  rename('Soil Location' = Soil,
+         'Seed Treatment' = Trmt) %>% 
+  
+  filter(Year == "2024") %>% 
+
+  kbl(digits = 1) %>%
+    kable_classic(full_width = F, html_font = "Times New Roman") %>% 
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+```
+
+**We can even go futher...just bare with me!** 
+
+```{r, warning=FALSE, message=FALSE}
+Assay %>%
+  filter(Year == "2024") %>% 
+  group_by(Soil:Trmt) %>% 
+  get_summary_stats(c(TotalRRI, AphRRI, RhizRRI), type="common") %>% 
+  
+  dplyr::select(c('Soil:Trmt', variable, mean, se)) %>% 
+  
+  mutate_at(vars(mean), funs(round(., 1))) %>% 
+  # mutates the variable 'mean' by using the function to round the number to one digit after the decimal
+  
+  mutate_at(vars(se), funs(round(., 2))) %>% 
+  # mutates the variable standard error
+  
+  mutate(se = paste0("(±", se, ")")) %>% 
+  # takes the standard error column and pastes the plus/minus sign before the number and parethesis around the everything
+  
+  mutate(mean = paste(mean, se, sep = " "))  %>% 
+  # take the new standard error column and pastes it after the mean column
+  
+  dplyr::select(-se) %>% 
+  # drops se column
+  
+  separate(col = 'Soil:Trmt',
+           into = c('Soil', 'Trmt'),
+           sep = ":") %>% 
+  
+  pivot_wider(
+    names_from = variable,
+    values_from = c(mean)) %>% 
+  rename('Soil Location' = Soil,
+         'Seed Treatment' = Trmt) %>% 
+
+  kbl() %>%
+    kable_classic(full_width = F, html_font = "Times New Roman") %>% 
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+```
