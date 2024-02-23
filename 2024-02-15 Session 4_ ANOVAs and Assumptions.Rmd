@@ -1,0 +1,543 @@
+---
+title: "2024-02-15 Session 4_ANOVAs and Assumptions"
+author: "Austin K Lien"
+date: "2024-02-15"
+output:
+  html_document:
+    # code_folding: hide
+    df_print: "kable"
+    toc: yes
+    toc_float: yes
+    toc_depth: 4
+    toc_width: 1
+    fig_retina: 2
+    number_sections: no
+    highlight: pygments
+    theme: sandstone
+    
+  pdf_document:
+    toc: yes
+    toc_depth: '4'
+---
+
+**Lets load in our package and set up our data first**
+
+```{r}
+# loading packages
+library(readxl)
+library(tidyverse)
+library(ggpubr)
+library(RColorBrewer)
+library(kableExtra)
+library(agricolae)
+library(MASS)
+library(car)
+```
+
+# Setting up Data
+```{r}
+# setwd("C:/Users/lienx/Documents/2024-02-06 R Workshop")
+
+setwd("G:/NWROC/SugarBeet_Pathology/R Workshop_2024_AKL")
+
+Assay <- read_excel(("2024-02-06 Data Set.xlsx"), 
+                      sheet = "Soil Assays")
+
+Assay$Rep <- as.factor(Assay$Rep)
+
+Assay$Trmt <- factor(Assay$Trmt, 
+                    levels = c('kab', 'tach'),
+                    labels = c("Kabina", "Tachigaren"))
+
+Assay$Soil <- as.factor(Assay$Soil)
+
+Assay$Year <- ordered(Assay$Year,
+                      levels = c('2024', '2023'),
+                      labels = c('2024', '2023'))
+```
+
+# Manipulating plots
+
+## ordering by mean
+```{r}
+Assay2 <- Assay
+
+Assay2$All_Trmt <- paste(Assay2$Year, 
+                         Assay2$Soil, 
+                         Assay2$Trmt,
+                        sep = ':')
+
+Assay2$All_Trmt <- with(Assay2, 
+                        
+# This reorders our treatment column by descending means of AphRRI                        
+                        reorder(All_Trmt, -AphRRI, mean))
+
+
+ggboxplot(Assay2,
+          x = "All_Trmt",
+          y = "AphRRI",
+          fill = "All_Trmt") +
+  theme(legend.position = "none") +
+  scale_fill_brewer(palette = "Dark2") +
+  
+  theme(axis.text.x = element_text(size = 8, 
+                                   angle = 90,
+                                   hjust = 1,
+                                   vjust = 0.5)) +
+  
+  stat_summary(fun = mean, geom = "point",
+               
+               # adds shape representing mean
+               shape = 1, size = 2)
+  
+```
+
+
+
+## dropping outliers
+
+Here we are creating a boxplot to visualize any outliers 
+
+```{r, warning=FALSE, message=FALSE}
+ggboxplot(Assay, 
+          y = "RhizRRI",
+          ylab = "Rhizoc Root Rot")
+```
+
+In ggplot2, an observation is defined as an outlier if it meets one of the following two requirements: The observation is 1.5 times the interquartile range less than the first quartile (Q1) The observation is 1.5 times the interquartile range greater than the third quartile (Q3).
+
+Based on the figure, we can see that there are 7 dots representing outliers
+
+```{r, warning=FALSE, message=FALSE}
+# This shows us the dimensions of our data fram (48 observations across 11 variables
+dim(Assay)
+
+# here we are defining the first and third quartiles
+quartiles <- quantile(Assay$RhizRRI, probs = c(.25, .75), na.rm = FALSE)
+
+# This is defining the interquartile range
+IQR <- IQR(Assay$RhizRRI)
+
+# This is setting our lower limit
+lower <- quartiles[1] - 1.5*IQR
+
+# This is setting our upper limit
+upper <- quartiles[2] + 1.5*IQR
+
+# Here we are keeping data that is greater than the lower limit and less than the upper limit
+RhizRRI_No_outliers <- filter(Assay, Assay$RhizRRI > lower & Assay$RhizRRI < upper)
+
+# Dimensions show that we now have only 41 observations
+dim(RhizRRI_No_outliers)
+
+
+RhizRRI_ONLY_outliers <- subset(Assay, Assay$RhizRRI <= lower | Assay$RhizRRI >= upper)
+dim(RhizRRI_ONLY_outliers)
+```
+
+
+# Analysis of Variance Models
+
+```{r}
+library(agricolae)
+
+library(lme4) 
+# OR
+library(lmerTest)
+
+library(emmeans)
+
+library(rcompanion)
+
+```
+
+
+## ANOVA (CRD) two-way factorial treatment structure
+
+The two following models are identical
+
+```{r}
+# This signifies and ANOVA for Aph RRI in response to Soil and Trmt and the interaction between Soil and Trmt
+# THIS IS THE SAME as below
+
+# Using summary() allows use to see the output of the ANOVA model
+# We also need to name the model so we can use it later on
+model_1 <- aov(AphRRI ~ Soil + Trmt + Soil:Trmt, data = Assay)
+
+
+summary(model_1)
+
+
+
+model_2 <- aov(AphRRI ~ Soil*Trmt, data = Assay)
+summary(model_2)
+
+```
+
+
+## ANOVA (RCBD) two-way factorial treatment structure
+```{r}
+
+# This adds a blocking factor to the interaction between Soil and Trmt and main effects
+# BE WARNED: This is not a mixed model! this is still a generalized linear model
+model_3 <- aov(AphRRI ~ Rep + Soil*Trmt, data = Assay)
+
+
+summary(model_3)
+```
+
+
+## LSD and HSD with agricolae
+
+```{r}
+library(agricolae)
+
+model <- aov(AphRRI ~ Soil*Trmt + Rep, Assay)
+summary(model)
+
+# Using LSD.test() performs Fisher's least significant difference
+LSD.test(model, 
+         trt = 'Trmt',
+         
+         # alpha changes your significance level; default is 0.05)
+         alpha = 0.1,
+         console=TRUE)
+
+
+LSD.test(model, 
+         trt = 'Soil',
+         console=TRUE)
+
+LSD.test(model, 
+         trt = c('Soil', 'Trmt'), 
+         console = TRUE)
+```
+
+## Checking assumptions and transformations 
+
+
+In linear regression analysis, it's crucial to check the assumptions underlying the model to ensure that the results are valid and reliable. Two of the key assumptions that are often checked are the normality of the residuals and the homoscedasticity (constant variance) of the residuals. Here's why it's important to check these assumptions and how histograms and formal tests can be used:
+
+- Normality of Residuals:
+  - One of the assumptions in linear regression is that the residuals (the differences between observed and predicted values) are normally distributed.
+  - The normality assumption is important because many statistical tests and confidence intervals associated with linear regression models rely on the normality of residuals.
+  - Checking for normality can be done visually using histograms of the residuals. A histogram of residuals that closely resembles a bell-shaped curve suggests normality.
+  - Formal tests for normality, such as the Shapiro-Wilk test or the Kolmogorov-Smirnov test, can also be performed to assess whether the residuals significantly deviate from a normal distribution.
+  - histograms can also be used to visualize normality
+  
+- Homoscedasticity (Constant Variance) of Residuals:
+  - Another assumption in linear regression is that the variance of the residuals is constant across all levels of the independent variables. This is known as homoscedasticity.
+  - Homoscedasticity is important because unequal variances (heteroscedasticity) can lead to biased estimates of regression coefficients and incorrect standard errors, affecting the validity of statistical inference.
+  - Visual inspection of residuals versus fitted values plot or residuals versus predictor variable plots can help detect patterns indicating non-constant variance. A horizontal band of points around zero suggests homoscedasticity.
+  - Formal tests for homoscedasticity, such as the Breusch-Pagan test or the White test, can be conducted to statistically evaluate whether the variance of the residuals is constant across different levels of the independent variables.
+- By checking these assumptions, particularly through the use of histograms for normality and diagnostic plots/tests for homoscedasticity, researchers can identify potential violations of the assumptions and take appropriate steps to address them. This may involve data transformation, using robust regression techniques, or considering alternative modeling approaches. Ensuring that the assumptions are met helps to maintain the reliability and validity of the regression analysis results.
+
+- Levene's test and the Breusch-Pagan test are both statistical tests used to assess the homogeneity of variance assumption in regression analysis. However, they differ in their approach and application:
+  - Levene's test is a non-parametric test used to assess the equality of variances across groups or treatments.
+    - It compares the absolute deviations of individual observations from the group mean (or median) to evaluate whether these deviations are similar across groups.
+    - Levene's test does not assume normality of the data, making it robust against violations of normality assumptions.
+    - It is often used in the context of analysis of variance (ANOVA) to check the homogeneity of variances assumption before proceeding with further analysis.
+  - The Breusch-Pagan test is a parametric test used specifically in the context of regression analysis to assess the homoscedasticity assumption.
+    - Homoscedasticity refers to the condition where the variance of the errors/residuals is constant across all levels of the independent variables.
+    - The Breusch-Pagan test assesses whether the variance of the residuals in a regression model is dependent on the independent variables. If significant, it suggests heteroscedasticity, meaning the variance of the residuals is not constant across the range of values of the independent variables.
+    - It is commonly used after running a regression model to check whether the assumptions of the linear regression model are met.
+
+```{r, warning=FALSE, message=FALSE}
+library(car)
+library(MASS) 
+
+# Creates density plot of given data values - similar to hist()
+ggdensity(Assay$AphRRI)
+
+# Creates histogram of given data values - similar to ggdensity()
+hist(Assay$AphRRI)
+
+# Quantile-Comparison Plot of empirical quantiles of a variable
+qqPlot(Assay$AphRRI)
+
+# Creates a linear model of Trmt and Soil main effects and interactions with of added blocking factor of the interaction between Replication and Year
+model <- aov(AphRRI ~ Trmt*Soil + Rep:Year, data = Assay)
+
+# Plots studentized residuals from a linear model
+qqPlot(model)
+
+# Performs the Shapiro-Wilk test of normality
+# null hypothesis is that the sample has been generated from normal distribution
+shapiro.test(residuals(model))
+
+# Computes Levene's test for homogeneity of variance across the specified group(s).
+leveneTest(lm(AphRRI ~ Soil*Trmt, data = Assay))
+
+# computes score test for non-constant error variance
+# another test for nonconstant variance called the Breusch-Pagan test
+ncvTest(lm(AphRRI ~ Soil*Trmt, data = Assay))
+
+# plots residuals vs fitted values 
+plot(model, 1)
+
+# Creates qq-plot of standardized residuals
+plot(model, 2)
+
+# creates scale-location plot - similar to residuals vs fitted plot
+plot(model, 3)
+
+# Plots Cook's distance, a measure of the influence of each individual data point (outliers)
+plot(model, 4)
+
+# assesses the presence of influential observations or outliers within each level of a categorical predictor variable
+plot(model, 5)
+
+
+
+
+```
+
+**Generally, lines in the model plots should be straight and/or fitted to be normal and homoscedastic**
+
+
+lets try a power transformation and see if that resolves our violation of constant variance
+
+
+```{r}
+model <- aov(AphRRI^3 ~ Trmt*Soil + Rep:Year, data = Assay)
+
+hist(Assay$AphRRI^3)
+
+shapiro.test(residuals(model))
+
+leveneTest(lm(AphRRI^3 ~ Soil*Trmt, data = Assay))
+
+ncvTest(lm(AphRRI^3 ~ Soil*Trmt, data = Assay))
+
+plot(model, 1)
+plot(model, 2)
+plot(model, 3)
+plot(model, 4)
+plot(model, 5)
+
+```
+
+
+
+## Split-plot with agricolae
+
+```{r}
+model <- with(Assay, sp.plot(Rep:Year, Soil,Trmt,AphRRI))
+
+gla<-model$gl.a
+glb<-model$gl.b
+Ea<-model$Ea 
+Eb<-model$Eb
+
+
+with(Assay, LSD.test(AphRRI,Soil, gla, Ea, 
+                     console=TRUE))
+with(Assay, LSD.test(AphRRI,Trmt, glb, Eb, 
+                     console=TRUE))
+with(Assay, LSD.test(AphRRI, Soil:Trmt, glb, Eb, 
+                     console=TRUE))
+
+```
+
+
+## Mixed-model with lmerTest and emmeans
+
+```{r}
+library(lmerTest)
+library(emmeans)
+```
+
+
+```{r}
+# 1 | x signifies random effect
+# the mixed model needs to be named so we can bring it into the next step
+
+model <- lmer(DAP_6 ~ Soil * Trmt + (1 | Year:Rep), data= Assay)
+
+
+anova(model) %>%  kbl() %>%
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+```
+
+
+
+```{r}
+# creates LSMEANS i.e., Estimated marginal means
+fit <- emmeans(model, list(pairwise ~ Soil:Trmt), adjust = "none")
+
+# adds compact letter display for EMMEANS
+cld <- multcomp::cld(object = fit$emmeans,
+                           Letters = letters)
+
+
+kbl(cld) %>%
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+```
+
+
+
+# Advanced tables for summary statistics
+
+```{r}
+model <- lmer(DAP_6 ~ Soil * Trmt + (1 | Rep)*(1 | Year), data= Assay)
+anova(model) %>%  kbl() %>%
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+
+
+# Here we are grabbing the p value for the interactions (3rd line)
+pval_DAP_6_int <- anova(model)$"Pr(>F)"[3]%>%  round(digits = 4) 
+
+
+fit <- emmeans(model, list(pairwise ~ Soil:Trmt), adjust = "none")
+cld <- multcomp::cld(object = fit$emmeans,
+                           Letters = letters)
+kbl(cld) %>% kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+
+
+cld_DAP_6_int <- cld %>% 
+  
+  # this creates new table with only the variables, emmean, and letter group
+  dplyr::select(c('Soil', 'Trmt', emmean, .group)) %>% 
+  
+  # this rounds the emmean to a whole number
+  mutate_at(vars(emmean), funs(round(., 0))) %>% 
+  
+  # this creates a new column with both emmean and letter group
+  mutate(emmean = paste(emmean, .group, sep = " "))  %>% 
+  
+  # this drops the letter group column
+  dplyr::select(-.group) %>% 
+  
+  # this renames the emmean column
+  rename('DAP_6' = emmean) %>% 
+  
+  # this sorts our table so we can merge it with the next one.
+  arrange(., Soil, Trmt)
+   
+```
+
+```{r}
+model <- lmer(DAP_14 ~ Soil * Trmt + (1 | Rep)*(1 | Year), data= Assay)
+anova(model) %>%  kbl() %>%
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+
+pval_DAP_14_int <- anova(model)$"Pr(>F)"[3]%>%  round(digits = 4)  
+
+fit <- emmeans(model, list(pairwise ~ Soil:Trmt), adjust = "none")
+cld <- multcomp::cld(object = fit$emmeans,
+                           Letters = letters)
+kbl(cld) %>%
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+
+cld_DAP_14_int <- cld %>% 
+  dplyr::select(c('Soil', 'Trmt', emmean, .group)) %>% 
+  mutate_at(vars(emmean), funs(round(., 0))) %>% 
+  mutate(emmean = paste(emmean, .group, sep = " "))  %>% 
+  dplyr::select(-.group) %>% 
+  rename('DAP_14' = emmean) %>% 
+  arrange(., Soil, Trmt)
+```
+
+```{r}
+model <- lmer(DAP_21 ~ Soil * Trmt + (1 | Rep)*(1 | Year), data= Assay)
+anova(model) %>%  kbl() %>%
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+
+pval_DAP_21_int <- anova(model)$"Pr(>F)"[3]%>%  round(digits = 4) 
+
+fit <- emmeans(model, list(pairwise ~ Soil:Trmt), adjust = "none")
+cld <- multcomp::cld(object = fit$emmeans,
+                           Letters = letters)
+kbl(cld) %>%
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+
+cld_DAP_21_int <- cld %>% 
+  dplyr::select(c('Soil', 'Trmt', emmean, .group)) %>% 
+  mutate_at(vars(emmean), funs(round(., 0))) %>% 
+  mutate(emmean = paste(emmean, .group, sep = " "))  %>% 
+  dplyr::select(-.group) %>% 
+  rename('DAP_21' = emmean) %>% 
+  arrange(., Soil, Trmt)
+```
+
+```{r warning = FALSE}
+model <- lmer(DAP_28 ~ Soil * Trmt + (1 | Rep)*(1 | Year), data= Assay)
+anova(model) %>%  kbl() %>%
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+
+pval_DAP_28_int <- anova(model)$"Pr(>F)"[3]%>%  round(digits = 4) 
+
+
+fit <- emmeans(model, list(pairwise ~ Soil:Trmt), adjust = "none")
+cld <- multcomp::cld(object = fit$emmeans,
+                           Letters = letters)
+kbl(cld) %>%
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+
+cld_DAP_28_int <- cld %>% 
+  dplyr::select(c('Soil', 'Trmt', emmean, .group)) %>% 
+  mutate_at(vars(emmean), funs(round(., 0))) %>% 
+  mutate(emmean = paste(emmean, .group, sep = " "))  %>% 
+  dplyr::select(-.group) %>% 
+  rename('DAP_28' = emmean) %>% 
+  arrange(., Soil, Trmt)
+```
+
+
+```{r}
+
+# this creates a row containing our p values
+pval <- (c(" ", "p-value", pval_DAP_6_int, pval_DAP_14_int, 
+           pval_DAP_21_int, pval_DAP_28_int))
+
+
+```
+
+
+
+## emmeans, letter grouping, and pvalue
+
+```{r, warning=FALSE, message=FALSE}
+Assay %>%
+  group_by(Soil:Trmt) %>% 
+  get_summary_stats(c(DAP_6, DAP_14, DAP_21, DAP_28), type="common") %>% 
+  
+  dplyr::select(c('Soil:Trmt', variable, mean, se)) %>% 
+  
+  mutate_at(vars(mean), funs(round(., 1))) %>% 
+  mutate_at(vars(se), funs(round(., 2))) %>% 
+  mutate(se = paste0("(±", se, ")")) %>% 
+  mutate(mean = paste(mean, se, sep = " "))  %>% 
+  dplyr::select(-se) %>% 
+  
+  separate(col = 'Soil:Trmt',
+           into = c('Soil', 'Trmt'),
+           sep = ":") %>% 
+  
+  pivot_wider(
+    names_from = variable,
+    values_from = c(mean)) %>% 
+  rename('Soil Location' = Soil,
+         'Seed Treatment' = Trmt) %>% 
+  rbind(., pval) %>% 
+
+  kbl() %>%
+    kable_classic(full_width = F, html_font = "Times New Roman") %>% 
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+```
+
+With Compact Letter Display
+
+```{r}
+cld_DAP_6_int %>% 
+  dplyr::left_join(cld_DAP_14_int, by = c('Soil', 'Trmt')) %>% 
+  dplyr::left_join(cld_DAP_21_int, by = c('Soil', 'Trmt')) %>% 
+  dplyr::left_join(cld_DAP_28_int, by = c('Soil', 'Trmt')) %>% 
+  mutate(Soil = as.character(Soil)) %>% 
+  mutate(Trmt = as.character(Trmt)) %>%  
+rbind(., pval) %>% 
+
+ kbl() %>%
+    kable_classic(full_width = F, html_font = "Times New Roman") %>% 
+  kable_styling(bootstrap_options = c("hover", "condensed", "responsive"))
+```
